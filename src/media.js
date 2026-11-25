@@ -199,6 +199,7 @@ function mungeSdp(sdp) {
   const parts = sdp.split(/\r\n(?=m=)/)
   return parts
     .map((sec) => {
+      if (sec.startsWith('m=audio')) return mungeOpus(sec)
       if (!sec.startsWith('m=video')) return sec
       const pts = sec.split('\r\n')[0].split(' ').slice(3)
       let lines = sec.split('\r\n')
@@ -217,6 +218,29 @@ function mungeSdp(sdp) {
       return lines.join('\r\n')
     })
     .join('\r\n')
+}
+
+// Som do PC em estéreo e com qualidade de música (128 kbps), em vez do
+// padrão de voz (mono, ~32 kbps). Também sem pausas em silêncio (usedtx=0).
+function mungeOpus(sec) {
+  const lines = sec.split('\r\n')
+  const rtpmap = lines.find((l) => /^a=rtpmap:\d+ opus\//i.test(l))
+  if (!rtpmap) return sec
+  const pt = rtpmap.split(':')[1].split(' ')[0]
+  const want = { stereo: '1', 'sprop-stereo': '1', maxaveragebitrate: '128000', useinbandfec: '1', usedtx: '0' }
+  const i = lines.findIndex((l) => l.startsWith(`a=fmtp:${pt} `))
+  const params = new Map()
+  if (i >= 0) {
+    for (const kv of lines[i].slice(`a=fmtp:${pt} `.length).split(';')) {
+      const [k, v] = kv.split('=')
+      if (k) params.set(k.trim(), v)
+    }
+  }
+  for (const [k, v] of Object.entries(want)) params.set(k, v)
+  const line = `a=fmtp:${pt} ` + [...params].map(([k, v]) => (v == null ? k : `${k}=${v}`)).join(';')
+  if (i >= 0) lines[i] = line
+  else lines.splice(lines.indexOf(rtpmap) + 1, 0, line)
+  return lines.join('\r\n')
 }
 
 export function installBitrateBoost() {

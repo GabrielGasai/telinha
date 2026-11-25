@@ -34,20 +34,37 @@ pub fn start_system_audio(
     let (info_tx, info_rx) = mpsc::channel::<Result<AudioInfo, String>>();
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
 
-    // O stream do cpal não pode trocar de thread, então ele vive nesta thread
+    // O stream de áudio não pode trocar de thread, então ele vive nesta thread
     // até recebermos o sinal de parar.
-    thread::spawn(move || match build_stream(on_chunk) {
-        Ok((stream, info)) => {
-            if let Err(e) = stream.play() {
-                let _ = info_tx.send(Err(e.to_string()));
+    thread::spawn(move || {
+        // Windows 10 (2004+) e 11: captura todo o som do PC MENOS o do próprio
+        // Telinha (as lives que você assiste). Assim não tem eco entre os PCs.
+        #[cfg(windows)]
+        {
+            if let Ok((client, capture, event)) = sem_telinha::setup() {
+                let _ = info_tx.send(Ok(AudioInfo {
+                    sample_rate: sem_telinha::RATE,
+                    device: "Som do PC (sem o Telinha)".into(),
+                }));
+                sem_telinha::pump(&capture, &event, &on_chunk, &stop_rx);
+                let _ = client.stop_stream();
                 return;
             }
-            let _ = info_tx.send(Ok(info));
-            let _ = stop_rx.recv();
-            drop(stream);
         }
-        Err(e) => {
-            let _ = info_tx.send(Err(e));
+        // Windows mais antigo: captura todo o som do PC (modo anterior).
+        match build_stream(on_chunk) {
+            Ok((stream, info)) => {
+                if let Err(e) = stream.play() {
+                    let _ = info_tx.send(Err(e.to_string()));
+                    return;
+                }
+                let _ = info_tx.send(Ok(info));
+                let _ = stop_rx.recv();
+                drop(stream);
+            }
+            Err(e) => {
+                let _ = info_tx.send(Err(e));
+            }
         }
     });
 
@@ -149,4 +166,74 @@ fn push_frames<T: Copy>(
 
 fn to_i16(x: f32) -> i16 {
     (x.clamp(-1.0, 1.0) * 32767.0) as i16
+}
+
+/// Captura do som do PC excluindo o próprio Telinha e tudo que ele abre
+/// (o WebView2 que toca as lives). Usa o "process loopback" do Windows.
+#[cfg(windows)]
+mod sem_telinha {
+    use super::*;
+    use std::collections::VecDeque;
+    use wasapi::{
+        AudioCaptureClient, AudioClient, Direction, Handle, SampleType, StreamMode, WaveFormat,
+    };
+
+    pub const RATE: u32 = 48000;
+
+    pub fn setup() -> Result<(AudioClient, AudioCaptureClient, Handle), String> {
+        let _ = wasapi::initialize_mta();
+        // false = EXCLUIR este processo e todos os filhos dele.
+        let mut client = AudioClient::new_application_loopback_client(std::process::id(), false)
+            .map_err(|e| format!("{e:?}"))?;
+        let format = WaveFormat::new(16, 16, SampleType::Int, RATE as usize, 2, None);
+        client
+            .initialize_client(
+                &format,
+                Direction::Capture,
+                StreamMode::EventsShared {
+                    autoconvert: true,
+                    buffer_duration_hns: 0,
+                },
+                None,
+            )
+            .map_err(|e| format!("{e:?}"))?;
+        let event = client.set_get_eventhandle().map_err(|e| format!("{e:?}"))?;
+        let capture = client
+            .get_audiocaptureclient()
+            .map_err(|e| format!("{e:?}"))?;
+        client.start_stream().map_err(|e| format!("{e:?}"))?;
+        Ok((client, capture, event))
+    }
+
+    /// Lê o áudio (estéreo, 16 bits, 48 kHz) e envia em pedaços de ~20 ms.
+    pub fn pump(
+        capture: &AudioCaptureClient,
+        event: &Handle,
+        ch: &Channel<Vec<i16>>,
+        stop_rx: &mpsc::Receiver<()>,
+    ) {
+        let mut queue: VecDeque<u8> = VecDeque::new();
+        let chunk_bytes = (RATE as usize / 50) * 4;
+        loop {
+            match stop_rx.try_recv() {
+                Ok(_) | Err(mpsc::TryRecvError::Disconnected) => break,
+                Err(mpsc::TryRecvError::Empty) => {}
+            }
+            // Sem nada tocando, o evento não chega: só espera de novo.
+            if event.wait_for_event(200).is_err() {
+                continue;
+            }
+            if capture.read_from_device_to_deque(&mut queue).is_err() {
+                break;
+            }
+            while queue.len() >= chunk_bytes {
+                let bytes: Vec<u8> = queue.drain(..chunk_bytes).collect();
+                let samples: Vec<i16> = bytes
+                    .chunks_exact(2)
+                    .map(|b| i16::from_le_bytes([b[0], b[1]]))
+                    .collect();
+                let _ = ch.send(samples);
+            }
+        }
+    }
 }

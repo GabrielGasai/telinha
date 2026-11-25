@@ -15,16 +15,18 @@ export function normalizeCode(raw) {
   return /^\d{4}$/.test(digits) ? digits : null
 }
 
-// Relays públicos usados só para os PCs se acharem (testados e estáveis).
+// Relays públicos usados só para os PCs se acharem. Testados: aceitam as mensagens
+// do app sem cadastro e sem limite agressivo por endereço de internet.
 // Quanto mais, maior a chance de os dois PCs alcançarem pelo menos um em comum.
 const RELAYS = [
-  'wss://nos.lol',
-  'wss://relay.damus.io',
   'wss://relay.primal.net',
-  'wss://offchain.pub',
-  'wss://nostr.mom',
   'wss://relay.snort.social',
+  'wss://nostr.bitcoiner.social',
+  'wss://relay.nostr.net',
+  'wss://relay.nostrcheck.me',
+  'wss://relay.illuminodes.com',
   'wss://nostr.data.haus',
+  'wss://nostr.oxtr.dev',
 ]
 
 export function openRoom(code) {

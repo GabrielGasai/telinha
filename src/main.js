@@ -66,7 +66,8 @@ function loadPrefs() {
     if (typeof p.pc === 'boolean') $('#opt-pc').checked = p.pc
     if (typeof p.mic === 'boolean') $('#opt-mic').checked = p.mic
     if (typeof p.cam === 'boolean') $('#opt-cam').checked = p.cam
-    if (p.res != null) $('#opt-res').value = String(p.res)
+    // Máximo de 1080p: preferências antigas (Nativa/1440p) voltam para 1080p.
+    $('#opt-res').value = p.res === 720 ? '720' : '1080'
     $('#home-name').value = localStorage.getItem('telinha:name') || ''
   } catch {}
 }
@@ -129,7 +130,7 @@ function enterRoom(code, openShare) {
   attachNet(net)
   S.timers.push(setInterval(stats, 2000))
 
-  // Se ninguém aparecer, entra de novo na sala a cada 20 s. Às vezes a primeira
+  // Se ninguém aparecer, entra de novo na sala a cada 15 s. Às vezes a primeira
   // tentativa de ligar os PCs falha, e uma nova tentativa conecta na hora.
   S.aloneSince = Date.now()
   S.timers.push(setInterval(() => {
@@ -138,7 +139,7 @@ function enterRoom(code, openShare) {
       S.aloneSince = Date.now()
       return
     }
-    if (Date.now() - S.aloneSince < 20000) return
+    if (Date.now() - S.aloneSince < 15000) return
     try { S.net.room.leave() } catch {}
     S.net = openRoom(S.code)
     attachNet(S.net)

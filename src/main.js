@@ -1,6 +1,7 @@
 import './styles.css'
 import { icons, renderIcons, setIcon } from './icons.js'
-import { createCode, normalizeCode, openRoom, relayStatus } from './room.js'
+import { createCode, normalizeCode, openRoom, relayStatus, RELAYS } from './room.js'
+import { startBridgeLink } from './bridge.js'
 import {
   isTauri, captureScreen, captureCamera, applyVideoQuality, preferH264, tuneSenders, videoKbps, Mixer, FPS,
   installBitrateBoost,
@@ -129,6 +130,8 @@ function enterRoom(code, openShare) {
 
   attachNet(net)
   S.timers.push(setInterval(stats, 2000))
+  S.enteredAt = Date.now()
+  startBridge(code, net.selfId)
 
   // Rede de segurança: se ficar 90 s sozinho, entra de novo na sala.
   // Não pode ser rápido: entre internets diferentes a ligação dos PCs leva
@@ -146,6 +149,39 @@ function enterRoom(code, openShare) {
     attachNet(S.net)
     S.aloneSince = Date.now()
   }, 2000))
+}
+
+// ---------- ponte automática ----------
+// Cada Telinha tenta virar uma ponte (abre portas no roteador e roda um servidor
+// TURN). Quem não consegue se ligar direto passa pela ponte de alguém da sala.
+async function startBridge(code, selfId) {
+  const link = startBridgeLink({ code, selfId, relays: RELAYS, onChange: () => S && render() })
+  S.bridge = link
+  if (!isTauri) return
+  try {
+    // Na primeira vez, o Windows pede permissão para liberar o Telinha no firewall.
+    if (!localStorage.getItem('telinha:fw')) {
+      const ok = await invoke('ensure_firewall').catch(() => false)
+      try { localStorage.setItem('telinha:fw', ok ? '1' : '0') } catch {}
+    }
+    const info = await invoke('start_bridge')
+    if (!S || S.bridge !== link) return
+    S.bridgeInfo = info
+    link.setMine(info)
+  } catch {
+    if (S?.bridge === link) S.bridgeInfo = { ok: false, reason: 'erro' }
+  }
+  if (S) render()
+}
+
+function bridgeText() {
+  const b = S.bridgeInfo
+  const others = S.bridge?.others?.() || 0
+  if (b?.ok) return 'ponte ligada'
+  if (others) return 'usando a ponte de um amigo'
+  if (b?.reason === 'cgnat') return 'sua internet não permite ser ponte'
+  if (b && !b.ok) return 'seu roteador não abriu a ponte'
+  return ''
 }
 
 // Liga os eventos da sala (gente entrando/saindo, telas, chat, imagens).
@@ -401,10 +437,11 @@ function render() {
   if (S.peers.size === 0) {
     // Sozinho na sala: mostra se está conseguindo falar com os servidores de encontro.
     const rs = S.relay
+    const bt = bridgeText()
     $('#room-sub').textContent = !rs
       ? 'Procurando amigos…'
       : rs.open > 0
-        ? `Procurando amigos… · ${rs.open} de ${rs.total} servidores de encontro`
+        ? `Procurando amigos… · ${rs.open} de ${rs.total} servidores de encontro${bt ? ` · ${bt}` : ''}`
         : 'Sem acesso aos servidores de encontro (antivírus ou firewall bloqueando?)'
   } else {
     $('#room-sub').textContent = `${total} ${total === 1 ? 'pessoa' : 'pessoas'}${live ? ` · ${live} ${live === 1 ? 'tela ao vivo' : 'telas ao vivo'}` : ''}`
@@ -966,6 +1003,8 @@ async function leaveRoom() {
   await stopShare(true)
   if (S.voice) S.voice.getTracks().forEach((t) => t.stop())
   for (const p of S.peers.values()) dropVoice(p)
+  S.bridge?.close()
+  if (isTauri) invoke('stop_bridge').catch(() => {})
   const s = S
   S = null
   s.timers.forEach(clearInterval)

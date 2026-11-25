@@ -185,8 +185,15 @@ function attachNet(net) {
     const p = S.peers.get(id) || { name: 'Alguém', rtt: null }
     const kind = meta?.kind || (stream.getAudioTracks().length ? 'screen' : 'camera')
     if (kind === 'camera') {
+      // Quem manda se a câmera aparece é o aviso "cam" da pessoa (onState).
+      // Aqui só guardamos o vídeo, e escondemos se ele parar de chegar.
       p.camStream = stream
-      p.cam = true
+      for (const t of stream.getVideoTracks()) {
+        t.addEventListener('mute', render)
+        t.addEventListener('unmute', render)
+        t.addEventListener('ended', render)
+      }
+      stream.addEventListener('removetrack', render)
     } else {
       p.screen = stream
       p.sharing = true
@@ -221,6 +228,11 @@ function broadcastState() {
   S?.net.sendState(myState())
 }
 
+// A câmera só aparece se ainda estiver chegando imagem dela.
+function camLive(stream) {
+  return !!stream && stream.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted)
+}
+
 function sendMyStreamsTo(id) {
   const { room } = S.net
   room.addStream(S.me.out, id, { kind: 'screen' })
@@ -234,7 +246,7 @@ function sharers() {
   const list = []
   if (S.me) list.push({ id: 'me', name: `${myName()} (você)`, screen: new MediaStream([S.me.video]), camStream: S.me.cam })
   for (const [id, p] of S.peers) {
-    if (p.sharing && p.screen) list.push({ id, name: p.name, screen: p.screen, camStream: p.cam ? p.camStream : null })
+    if (p.sharing && p.screen) list.push({ id, name: p.name, screen: p.screen, camStream: p.cam && camLive(p.camStream) ? p.camStream : null })
   }
   return list
 }

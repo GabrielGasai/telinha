@@ -22,10 +22,28 @@ export function normalizeCode(raw) {
   return m ? `${m[1]}-${m[2]}` : null
 }
 
+// Relays públicos usados só para os PCs se acharem (testados e estáveis).
+// Quanto mais, maior a chance de os dois PCs alcançarem pelo menos um em comum.
+const RELAYS = [
+  'wss://nos.lol',
+  'wss://relay.damus.io',
+  'wss://relay.primal.net',
+  'wss://offchain.pub',
+  'wss://nostr.mom',
+  'wss://relay.snort.social',
+  'wss://nostr.data.haus',
+]
+
 export function openRoom(code) {
   const id = code.replace('-', '')
   const room = joinRoom(
-    { appId: APP_ID, password: `telinha:${id}`, rtcConfig: { iceServers: ICE_SERVERS } },
+    {
+      appId: APP_ID,
+      password: `telinha:${id}`,
+      rtcConfig: { iceServers: ICE_SERVERS },
+      relayUrls: RELAYS,
+      relayRedundancy: RELAYS.length,
+    },
     id,
   )
   // Cada pessoa avisa as outras: nome, se está compartilhando e se a câmera está ligada.

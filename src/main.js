@@ -126,6 +126,28 @@ function enterRoom(code, openShare) {
     showError($('#share-error'), '')
   }
 
+  attachNet(net)
+  S.timers.push(setInterval(stats, 2000))
+
+  // Se ninguém aparecer, entra de novo na sala a cada 20 s. Às vezes a primeira
+  // tentativa de ligar os PCs falha, e uma nova tentativa conecta na hora.
+  S.aloneSince = Date.now()
+  S.timers.push(setInterval(() => {
+    if (!S) return
+    if (S.peers.size > 0) {
+      S.aloneSince = Date.now()
+      return
+    }
+    if (Date.now() - S.aloneSince < 20000) return
+    try { S.net.room.leave() } catch {}
+    S.net = openRoom(S.code)
+    attachNet(S.net)
+    S.aloneSince = Date.now()
+  }, 5000))
+}
+
+// Liga os eventos da sala (gente entrando/saindo, telas, chat, imagens).
+function attachNet(net) {
   net.room.onPeerJoin((id) => {
     if (!S.peers.has(id)) S.peers.set(id, { name: 'Entrando…', sharing: false, cam: false, rtt: null })
     colorOf(id)
@@ -184,7 +206,6 @@ function enterRoom(code, openShare) {
     if (text) addChat(S.peers.get(id)?.name || 'Alguém', text, false, null, colorOf(id))
   })
 
-  S.timers.push(setInterval(stats, 2000))
 }
 
 // `watching`: de quem é a tela que eu estou vendo grande. Quem compartilha usa

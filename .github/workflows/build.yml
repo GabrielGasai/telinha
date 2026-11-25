@@ -1,0 +1,43 @@
+# Gera o instalador do Telinha na nuvem do GitHub (Windows) e publica
+# na pagina de versoes (Releases). Roda sozinho a cada atualizacao do codigo,
+# ou manualmente pela aba "Actions" > "Gerar Telinha" > "Run workflow".
+name: Gerar Telinha
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - run: npm install
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'Telinha v__VERSION__'
+          releaseBody: 'Baixe o arquivo que termina em **x64-setup.exe** aqui embaixo, abra e instale. Se o Windows avisar, clique em *Mais informacoes* e depois em *Executar assim mesmo*.'
+          releaseDraft: false
+          prerelease: false

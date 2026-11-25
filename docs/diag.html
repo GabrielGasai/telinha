@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Telinha · Teste de conexão</title>
+<link rel="icon" href="icon.png" />
+<style>
+  body { margin: 0; background: #0f1115; color: #e8eaed; font: 16px/1.6 'Segoe UI', system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 20px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  p { color: #9aa3ae; margin: 0 0 20px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 12px 16px; background: #171a21; border: 1px solid #1e222a; border-radius: 10px; margin-bottom: 8px; }
+  .ok { color: #3ddc97; font-weight: 600; } .bad { color: #ff8a8e; font-weight: 600; } .wait { color: #f2c14e; }
+  #verdict { margin-top: 20px; padding: 16px; border-radius: 12px; background: #13382a; color: #e8eaed; display: none; }
+  #verdict.bad { background: #3a1518; }
+  code { background: #1e222a; padding: 2px 6px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Teste de conexão do Telinha</h1>
+  <p>Deixe esta página aberta uns 30 segundos. Depois tire um print e mande.</p>
+  <div class="row"><span>Servidores de encontro alcançados</span><span id="relays" class="wait">testando…</span></div>
+  <div class="row"><span>Conexão direta (UDP) liberada</span><span id="udp" class="wait">testando…</span></div>
+  <div class="row"><span>Endereço público visível (STUN)</span><span id="srflx" class="wait">testando…</span></div>
+  <div class="row"><span>IPv6</span><span id="ipv6" class="wait">testando…</span></div>
+  <div class="row"><span>Encontrou alguém na sala 0000</span><span id="peer" class="wait">procurando…</span></div>
+  <div id="verdict"></div>
+</main>
+<script type="module">
+const $ = (id) => document.getElementById(id)
+const set = (id, text, cls) => { $(id).textContent = text; $(id).className = cls }
+const RELAYS = ['wss://nos.lol','wss://relay.damus.io','wss://relay.primal.net','wss://offchain.pub','wss://nostr.mom','wss://relay.snort.social','wss://nostr.data.haus']
+const ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }]
+const result = {}
+
+// 1) Relays
+const relayTest = (u) => new Promise((res) => { let done = false; const ws = new WebSocket(u)
+  const fin = (ok) => { if (done) return; done = true; try { ws.close() } catch {}; res(ok) }
+  ws.onopen = () => fin(true); ws.onerror = () => fin(false); setTimeout(() => fin(false), 7000) })
+Promise.all(RELAYS.map(relayTest)).then((r) => { const n = r.filter(Boolean).length; result.relays = n
+  set('relays', `${n} de ${RELAYS.length}`, n >= 2 ? 'ok' : 'bad'); verdict() })
+
+// 2) Candidatos ICE
+;(async () => {
+  const pc = new RTCPeerConnection({ iceServers: ICE }); pc.createDataChannel('x')
+  const types = new Set(); let v6 = false
+  pc.onicecandidate = (e) => { if (!e.candidate) return; const c = e.candidate.candidate.split(' ')
+    types.add(c[7]); if (c[4] && c[4].includes(':')) v6 = true }
+  await pc.setLocalDescription(await pc.createOffer())
+  await new Promise((r) => setTimeout(r, 6000)); pc.close()
+  result.srflx = types.has('srflx'); result.udp = types.has('srflx') || types.has('host'); result.v6 = v6
+  set('udp', result.srflx ? 'sim' : 'não', result.srflx ? 'ok' : 'bad')
+  set('srflx', result.srflx ? 'sim' : 'não (UDP bloqueado?)', result.srflx ? 'ok' : 'bad')
+  set('ipv6', v6 ? 'sim' : 'não', v6 ? 'ok' : 'wait'); verdict()
+})()
+
+// 3) Entrar na sala de teste
+;(async () => {
+  try {
+    const T = await import('https://esm.sh/trystero@0.21/nostr')
+    const room = T.joinRoom({ appId: 'telinha-p2p-v1', password: 'telinha:0000', rtcConfig: { iceServers: ICE }, relayUrls: RELAYS, relayRedundancy: RELAYS.length }, '0000')
+    const [send, get] = room.makeAction('state')
+    const names = new Map()
+    const show = () => { result.peer = names.size > 0; set('peer', names.size ? [...names.values()].join(', ') : 'ninguém ainda', names.size ? 'ok' : 'wait'); verdict() }
+    room.onPeerJoin((id) => { names.set(id, 'alguém'); send({ name: 'Teste de conexão', sharing: false, cam: false }, id); show() })
+    room.onPeerLeave((id) => { names.delete(id); show() })
+    get((d, id) => { names.set(id, String(d?.name || 'alguém').slice(0, 24)); show() })
+    setTimeout(() => { if (!names.size) { result.peer = false; set('peer', 'ninguém', 'bad'); verdict() } }, 30000)
+  } catch (e) { set('peer', 'erro: ' + e.message, 'bad') }
+})()
+
+function verdict() {
+  const v = $('verdict')
+  if (result.peer) { v.style.display = 'block'; v.className = ''; v.textContent = 'Tudo certo: esta internet consegue se conectar com quem está na sala. Se o app não conecta neste PC, o problema é o app (versão antiga ou antivírus/firewall bloqueando o Telinha).'; return }
+  if (result.relays === 0) { v.style.display = 'block'; v.className = 'bad'; v.textContent = 'Esta internet não alcança nenhum servidor de encontro. Pode ser firewall, antivírus, rede de empresa/escola ou bloqueio da operadora.'; return }
+  if (result.srflx === false) { v.style.display = 'block'; v.className = 'bad'; v.textContent = 'Esta internet bloqueia conexão direta (UDP). Sem isso, o Telinha não consegue ligar os PCs.'; return }
+  if (result.peer === false && result.relays > 0 && result.srflx) { v.style.display = 'block'; v.className = 'bad'; v.textContent = 'A internet parece normal, mas não achou ninguém na sala 0000. Confira se outro PC está na sala com esse código ao mesmo tempo. Se estiver, as duas internets não estão conseguindo se ligar direto (CGNAT).'; return }
+}
+</script>
+</body>
+</html>

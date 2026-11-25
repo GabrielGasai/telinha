@@ -1,6 +1,6 @@
 import './styles.css'
 import { renderIcons, setIcon } from './icons.js'
-import { createCode, normalizeCode, openRoom } from './room.js'
+import { createCode, normalizeCode, openRoom, relayStatus } from './room.js'
 import {
   isTauri, captureScreen, captureCamera, applyVideoQuality, preferH264, tuneSenders, videoKbps, Mixer, FPS,
   installBitrateBoost,
@@ -333,7 +333,17 @@ function render() {
   $('#people-count').textContent = total
   $('#people-empty').hidden = S.peers.size > 0
   const live = list.length
-  $('#room-sub').textContent = `${total} ${total === 1 ? 'pessoa' : 'pessoas'}${live ? ` · ${live} ${live === 1 ? 'tela ao vivo' : 'telas ao vivo'}` : ''}`
+  if (S.peers.size === 0) {
+    // Sozinho na sala: mostra se está conseguindo falar com os servidores de encontro.
+    const rs = S.relay
+    $('#room-sub').textContent = !rs
+      ? 'Procurando amigos…'
+      : rs.open > 0
+        ? `Procurando amigos… · ${rs.open} de ${rs.total} servidores de encontro`
+        : 'Sem acesso aos servidores de encontro (antivírus ou firewall bloqueando?)'
+  } else {
+    $('#room-sub').textContent = `${total} ${total === 1 ? 'pessoa' : 'pessoas'}${live ? ` · ${live} ${live === 1 ? 'tela ao vivo' : 'telas ao vivo'}` : ''}`
+  }
 
   // Avisa os outros quando eu troco a tela que estou assistindo
   if (S.sentFocus !== S.focus) {
@@ -649,6 +659,7 @@ function videoPlan(track, peerId) {
 // ---------- estatísticas (a cada 2 s) ----------
 async function stats() {
   if (!S) return
+  try { S.relay = relayStatus() } catch {}
   const peers = S.net.room.getPeers()
   let upBits = 0
   let watchInfo = ''

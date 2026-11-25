@@ -24,6 +24,7 @@
   <div class="row"><span>Servidores de encontro alcançados</span><span id="relays" class="wait">testando…</span></div>
   <div class="row"><span>Conexão direta (UDP) liberada</span><span id="udp" class="wait">testando…</span></div>
   <div class="row"><span>Endereço público visível (STUN)</span><span id="srflx" class="wait">testando…</span></div>
+  <div class="row"><span>Tipo de roteador (NAT)</span><span id="nat" class="wait">testando…</span></div>
   <div class="row"><span>IPv6</span><span id="ipv6" class="wait">testando…</span></div>
   <div class="row"><span>Encontrou alguém na sala 0000</span><span id="peer" class="wait">procurando…</span></div>
   <div id="verdict"></div>
@@ -45,14 +46,18 @@ Promise.all(RELAYS.map(relayTest)).then((r) => { const n = r.filter(Boolean).len
 // 2) Candidatos ICE
 ;(async () => {
   const pc = new RTCPeerConnection({ iceServers: ICE }); pc.createDataChannel('x')
-  const types = new Set(); let v6 = false
+  const types = new Set(); let v6 = false; const mapped = new Map()
   pc.onicecandidate = (e) => { if (!e.candidate) return; const c = e.candidate.candidate.split(' ')
-    types.add(c[7]); if (c[4] && c[4].includes(':')) v6 = true }
+    types.add(c[7]); if (c[4] && c[4].includes(':')) v6 = true
+    if (c[7] === 'srflx' && !c[4].includes(':')) { const k = c[4]; if (!mapped.has(k)) mapped.set(k, new Set()); mapped.get(k).add(c[5]) } }
   await pc.setLocalDescription(await pc.createOffer())
   await new Promise((r) => setTimeout(r, 6000)); pc.close()
   result.srflx = types.has('srflx'); result.udp = types.has('srflx') || types.has('host'); result.v6 = v6
   set('udp', result.srflx ? 'sim' : 'não', result.srflx ? 'ok' : 'bad')
   set('srflx', result.srflx ? 'sim' : 'não (UDP bloqueado?)', result.srflx ? 'ok' : 'bad')
+  const ports = [...mapped.values()].reduce((n, x) => Math.max(n, x.size), 0)
+  result.sym = ports > 1
+  set('nat', !result.srflx ? 'desconhecido' : result.sym ? 'restrito (porta muda)' : 'normal', !result.srflx ? 'wait' : result.sym ? 'bad' : 'ok')
   set('ipv6', v6 ? 'sim' : 'não', v6 ? 'ok' : 'wait'); verdict()
 })()
 
@@ -76,6 +81,7 @@ function verdict() {
   if (result.peer) { v.style.display = 'block'; v.className = ''; v.textContent = 'Tudo certo: esta internet consegue se conectar com quem está na sala. Se o app não conecta neste PC, o problema é o app (versão antiga ou antivírus/firewall bloqueando o Telinha).'; return }
   if (result.relays === 0) { v.style.display = 'block'; v.className = 'bad'; v.textContent = 'Esta internet não alcança nenhum servidor de encontro. Pode ser firewall, antivírus, rede de empresa/escola ou bloqueio da operadora.'; return }
   if (result.srflx === false) { v.style.display = 'block'; v.className = 'bad'; v.textContent = 'Esta internet bloqueia conexão direta (UDP). Sem isso, o Telinha não consegue ligar os PCs.'; return }
+  if (result.peer === false && result.sym) { v.style.display = 'block'; v.className = 'bad'; v.textContent = 'O roteador/operadora desta internet é do tipo restrito: ele muda a porta a cada conexão, o que impede a ligação direta com outra internet que também seja restrita.'; return }
   if (result.peer === false && result.relays > 0 && result.srflx) { v.style.display = 'block'; v.className = 'bad'; v.textContent = 'A internet parece normal, mas não achou ninguém na sala 0000. Confira se outro PC está na sala com esse código ao mesmo tempo. Se estiver, as duas internets não estão conseguindo se ligar direto (CGNAT).'; return }
 }
 </script>

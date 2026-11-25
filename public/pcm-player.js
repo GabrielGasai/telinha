@@ -1,5 +1,5 @@
 // AudioWorklet que toca o áudio do PC recebido do Rust (estéreo, Int16 intercalado).
-// Mantém um buffer pequeno (~60 ms) e descarta atraso acumulado acima de ~250 ms,
+// Mantém um buffer pequeno (~40 ms) e descarta atraso acumulado acima de ~100 ms,
 // para o som não ficar atrasado em relação à imagem.
 class PcmPlayer extends AudioWorkletProcessor {
   constructor() {
@@ -11,8 +11,8 @@ class PcmPlayer extends AudioWorkletProcessor {
     this.r = 0
     this.count = 0
     this.started = false
-    this.target = Math.round(sampleRate * 0.06)
-    this.max = Math.round(sampleRate * 0.25)
+    this.target = Math.round(sampleRate * 0.04)
+    this.max = Math.round(sampleRate * 0.1)
     this.ratio = 1 // taxa de entrada / taxa do AudioContext
     this.phase = 0
     this.lastL = 0

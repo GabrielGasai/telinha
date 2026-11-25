@@ -1,6 +1,7 @@
 // Captura de tela, câmera, microfone e mixagem de áudio.
 import { invoke, Channel } from '@tauri-apps/api/core'
 import { VIDEO_KBPS, MAX_KBPS } from './config.js'
+import { fixRemoteSdp } from './bridge.js'
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -263,7 +264,7 @@ export function installBitrateBoost() {
     }
   }
   P.setRemoteDescription = function (desc) {
-    if (desc && desc.sdp) desc = { type: desc.type, sdp: mungeSdp(desc.sdp) }
+    if (desc && desc.sdp) desc = { type: desc.type, sdp: fixRemoteSdp(mungeSdp(desc.sdp)) }
     return origRemote.call(this, desc)
   }
 }

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Telinha</title>
+</head>
+<body>
+  <div id="app">
+
+    <!-- Início -->
+    <section id="view-home" class="view">
+      <header class="brand"><span class="logo" data-icon="logo"></span>Telinha</header>
+      <div class="center">
+        <div class="home-card">
+          <div class="stack-8">
+            <h1>Transmita sua tela para os amigos</h1>
+            <p class="muted">Crie uma sala, chame a galera e qualquer um pode mostrar a tela.</p>
+          </div>
+          <div class="field">
+            <label for="home-name">Seu nome</label>
+            <input id="home-name" maxlength="24" autocomplete="off" placeholder="Seu nome" />
+          </div>
+          <button id="btn-create" class="btn primary big"><span data-icon="share"></span>Criar sala</button>
+          <div class="divider"><span>ou entre na sala de alguém</span></div>
+          <form id="join-form" class="row-8">
+            <label for="join-code" class="sr-only">Código da sala</label>
+            <input id="join-code" class="mono" placeholder="LOBO-7342" autocomplete="off" />
+            <button class="btn" type="submit">Entrar</button>
+          </form>
+          <p id="home-error" class="error" hidden></p>
+          <p class="foot"><span data-icon="lock"></span>Conexão direta entre vocês. Nada passa por servidor.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sala -->
+    <section id="view-room" class="view" hidden>
+      <header class="topbar">
+        <div class="row-12">
+          <span class="muted small">Sala</span>
+          <button id="btn-copy" class="code-btn mono" title="Copiar código"><span id="room-code"></span><span data-icon="copy"></span></button>
+          <span id="room-sub" class="muted small"></span>
+        </div>
+        <button id="btn-leave" class="btn">Sair da sala</button>
+      </header>
+
+      <div class="room-body">
+        <div class="room-main">
+          <div class="stage" id="stage">
+            <video id="stage-video" autoplay playsinline></video>
+            <span id="stage-tag" class="stage-tag" hidden></span>
+            <video id="stage-cam" class="pip movable" title="Arraste para mover a câmera" autoplay muted playsinline hidden></video>
+            <button id="btn-exit-fs" class="fs-exit" aria-label="Sair da tela cheia"><span data-icon="shrink"></span></button>
+            <div id="stage-empty" class="overlay">
+              <p>Ninguém está mostrando a tela agora.</p>
+              <button id="btn-empty-share" class="btn primary"><span data-icon="share"></span>Compartilhar minha tela</button>
+            </div>
+            <div id="stage-play" class="overlay" hidden>
+              <p>Clique para começar a assistir.</p>
+              <button id="btn-play" class="btn primary">Assistir</button>
+            </div>
+          </div>
+
+          <div id="tiles" class="tiles" hidden></div>
+
+          <div id="share-ctrls" class="bar my-bar" hidden>
+            <span class="my-label"><span class="live-dot"></span>Sua live</span>
+<div class="controls">
+                <button id="btn-switch" class="ctrl labeled" title="Escolher outra tela ou janela para transmitir"><span data-icon="screen"></span><small>Trocar tela</small></button>
+                <button id="btn-pc" class="ctrl labeled" title="Liga ou desliga o som do seu PC na SUA transmissão (não muda o que você ouve)"><span data-icon="volume"></span><small>Som da sua live</small></button>
+                <button id="btn-mic" class="ctrl labeled" title="Liga ou desliga o seu microfone na SUA transmissão"><span data-icon="micOff"></span><small>Seu microfone</small></button>
+                <button id="btn-cam" class="ctrl labeled" title="Liga ou desliga a sua câmera na SUA transmissão"><span data-icon="camOff"></span><small>Sua câmera</small></button>
+                <label for="q-res" class="sr-only">Resolução</label>
+                <select id="q-res" class="q-res" title="Resolução"><option value="0">Nativa</option><option value="1440">1440p</option><option value="1080">1080p</option><option value="720">720p</option></select>
+                <button id="btn-stop" class="btn danger ctrl-wide">Parar</button>
+              </div>
+            <span class="bar-side"></span>
+          </div>
+
+          <div class="bar">
+            <div class="row-8 bar-side">
+              <button id="btn-mute" class="icon-btn" aria-label="Silenciar o que você está assistindo" title="Silenciar o que você está assistindo"><span data-icon="volume"></span></button>
+              <div class="vol-box">
+                <label for="vol" class="vol-label">Volume do que você assiste</label>
+                <input id="vol" type="range" min="0" max="100" value="80" />
+              </div>
+            </div>
+
+            <div class="controls">
+              <div class="pop-wrap" id="share-wrap">
+                <button id="btn-share" class="btn primary share-btn"><span data-icon="share"></span>Compartilhar tela</button>
+                <div id="share-pop" class="popover" hidden>
+                  <strong>Compartilhar sua tela</strong>
+                  <label class="toggle"><span>Áudio do PC</span><input type="checkbox" id="opt-pc" checked /><i></i></label>
+                  <label class="toggle"><span>Microfone</span><input type="checkbox" id="opt-mic" /><i></i></label>
+                  <label class="toggle"><span>Câmera</span><input type="checkbox" id="opt-cam" /><i></i></label>
+                  <label class="sel">Resolução
+                    <select id="opt-res"><option value="0" selected>Nativa (melhor)</option><option value="1440">1440p</option><option value="1080">1080p</option><option value="720">720p</option></select>
+                  </label>
+                  <button id="btn-pick" class="btn primary">Escolher tela</button>
+                  <p id="share-error" class="error" hidden></p>
+                </div>
+              </div>
+
+
+            </div>
+
+            <div class="row-8 bar-side right">
+              <span id="info" class="muted small"></span>
+              <button id="btn-fs" class="icon-btn" aria-label="Tela cheia"><span data-icon="expand"></span></button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="room-side">
+          <div class="card">
+            <h3>Na sala (<span id="people-count">1</span>)</h3>
+            <ul id="people"></ul>
+            <p id="people-empty" class="muted small">Copie o código da sala lá em cima e mande para os amigos.</p>
+          </div>
+          <div id="my-stats" class="card stats" hidden>
+            <h3>Sua transmissão</h3>
+            <div><span class="muted">Qualidade</span><span id="st-quality">–</span></div>
+            <div><span class="muted">Upload usado</span><span id="st-up">0 Mbps</span></div>
+            <div><span class="muted">Áudio</span><span id="st-audio">–</span></div>
+          </div>
+          <div class="card chat">
+            <h3>Chat da sala</h3>
+            <div id="chat-log" class="chat-log" aria-live="polite">
+              <p id="chat-empty" class="muted small">Mande mensagens, links e imagens para a galera (cole com Ctrl+V ou arraste). Quem entrar depois não vê as mensagens antigas.</p>
+            </div>
+            <form id="chat-form" class="chat-form">
+              <button id="chat-attach" class="icon-btn attach" type="button" aria-label="Enviar imagem" title="Enviar imagem (ou cole com Ctrl+V)"><span data-icon="clip"></span></button>
+              <input id="chat-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+              <label for="chat-input" class="sr-only">Mensagem</label>
+              <input id="chat-input" maxlength="500" placeholder="Escreva uma mensagem" autocomplete="off" />
+              <button class="icon-btn send" type="submit" aria-label="Enviar mensagem" title="Enviar"><span data-icon="send"></span></button>
+            </form>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <div id="lightbox" class="lightbox" hidden><img id="lightbox-img" alt="Imagem do chat em tamanho grande" /></div>
+    <div id="toast" role="status" hidden></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

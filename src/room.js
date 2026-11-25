@@ -18,7 +18,7 @@ export function normalizeCode(raw) {
 // Relays públicos usados só para os PCs se acharem. Testados: aceitam as mensagens
 // do app sem cadastro e sem limite agressivo por endereço de internet.
 // Quanto mais, maior a chance de os dois PCs alcançarem pelo menos um em comum.
-const RELAYS = [
+export const RELAYS = [
   'wss://relay.primal.net',
   'wss://relay.snort.social',
   'wss://nostr.bitcoiner.social',

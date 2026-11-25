@@ -4,7 +4,7 @@ import { VIDEO_KBPS, MAX_KBPS } from './config.js'
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-const SIZES = { 720: [1280, 720], 1080: [1920, 1080], 1440: [2560, 1440] }
+const SIZES = { 720: [1280, 720], 1080: [1920, 1080] }
 
 // Toda transmissão é a 30 fps, priorizando nitidez.
 export const FPS = 30
@@ -18,8 +18,8 @@ export function videoKbps(res, track) {
 }
 
 function videoConstraints(res, fps = FPS) {
-  if (!SIZES[res]) return { frameRate: { ideal: fps, max: fps } } // nativa
-  const [w, h] = SIZES[res]
+  // Limite da transmissão: 1080p (qualquer outro valor vira 1080p).
+  const [w, h] = SIZES[res] || SIZES[1080]
   // "ideal" pede os quadros escolhidos de verdade (sem ele o Windows captura a 30 fps).
   return { width: { max: w }, height: { max: h }, frameRate: { ideal: fps, max: fps } }
 }

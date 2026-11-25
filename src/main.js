@@ -1,5 +1,5 @@
 import './styles.css'
-import { renderIcons, setIcon } from './icons.js'
+import { icons, renderIcons, setIcon } from './icons.js'
 import { createCode, normalizeCode, openRoom, relayStatus } from './room.js'
 import {
   isTauri, captureScreen, captureCamera, applyVideoQuality, preferH264, tuneSenders, videoKbps, Mixer, FPS,
@@ -155,10 +155,12 @@ function attachNet(net) {
     colorOf(id)
     net.sendState(myState(), id)
     if (S.me) sendMyStreamsTo(id)
+    if (S.voice) net.room.addStream(S.voice, id, { kind: 'voice' })
     render()
   })
 
   net.room.onPeerLeave((id) => {
+    dropVoice(S.peers.get(id))
     S.peers.delete(id)
     S.lastBytes.delete(id)
     if (S.focus === id) S.focus = null
@@ -171,6 +173,7 @@ function attachNet(net) {
     p.sharing = !!data?.sharing
     p.cam = !!data?.cam
     p.watching = data?.watching || null
+    p.voice = !!data?.voice
     if (!p.sharing) {
       p.screen = null
       p.camStream = null
@@ -183,8 +186,10 @@ function attachNet(net) {
 
   net.room.onPeerStream((stream, id, meta) => {
     const p = S.peers.get(id) || { name: 'Alguém', rtt: null }
-    const kind = meta?.kind || (stream.getAudioTracks().length ? 'screen' : 'camera')
-    if (kind === 'camera') {
+    const kind = meta?.kind || (!stream.getVideoTracks().length ? 'voice' : stream.getAudioTracks().length ? 'screen' : 'camera')
+    if (kind === 'voice') {
+      playVoice(p, stream)
+    } else if (kind === 'camera') {
       // Quem manda se a câmera aparece é o aviso "cam" da pessoa (onState).
       // Aqui só guardamos o vídeo, e escondemos se ele parar de chegar.
       p.camStream = stream
@@ -221,12 +226,58 @@ function attachNet(net) {
 // isso para mandar qualidade total só para quem está assistindo a tela dele,
 // e uma miniatura leve para o resto (economiza internet e PC de quem transmite).
 function myState() {
-  return { name: myName(), sharing: !!S?.me, cam: !!S?.me?.cam, watching: S?.focus && S.focus !== 'me' ? S.focus : null }
+  return { name: myName(), sharing: !!S?.me, cam: !!S?.me?.cam, voice: !!S?.voice || !!S?.me?.mixer?.micOn, watching: S?.focus && S.focus !== 'me' ? S.focus : null }
 }
 
 function broadcastState() {
   S?.net.sendState(myState())
 }
+
+// ---------- conversa por microfone (para todo mundo, transmitindo ou não) ----------
+// Quem não está transmitindo manda só a voz. Quem está transmitindo usa o
+// "Seu microfone" da live (que já vai junto com o som da tela).
+function playVoice(p, stream) {
+  dropVoice(p)
+  const el = document.createElement('audio')
+  el.autoplay = true
+  el.srcObject = stream
+  el.play().catch(() => {})
+  document.body.appendChild(el)
+  p.voiceEl = el
+}
+
+function dropVoice(p) {
+  if (!p?.voiceEl) return
+  p.voiceEl.srcObject = null
+  p.voiceEl.remove()
+  p.voiceEl = null
+}
+
+async function setVoice(on) {
+  if (!S) return
+  if (on && !S.voice) {
+    let mic
+    try {
+      mic = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      })
+    } catch {
+      toast('Não consegui abrir o microfone.')
+      return
+    }
+    if (!S) return mic.getTracks().forEach((t) => t.stop())
+    S.voice = mic
+    for (const id of Object.keys(S.net.room.getPeers())) S.net.room.addStream(mic, id, { kind: 'voice' })
+  } else if (!on && S.voice) {
+    try { S.net.room.removeStream(S.voice) } catch {}
+    S.voice.getTracks().forEach((t) => t.stop())
+    S.voice = null
+  }
+  broadcastState()
+  render()
+}
+$('#btn-voice').addEventListener('click', () => setVoice(!S?.voice))
 
 // A câmera só aparece se ainda estiver chegando imagem dela.
 function camLive(stream) {
@@ -331,18 +382,18 @@ function render() {
   // Pessoas na sala
   const people = $('#people')
   people.innerHTML = ''
-  const addPerson = (id, name, live, rtt) => {
+  const addPerson = (id, name, live, rtt, talking) => {
     const li = document.createElement('li')
     let q = ''
     if (rtt != null) {
       const ms = rtt * 1000
       q = ms < 90 ? '<span class="q good">ótima</span>' : ms < 220 ? '<span class="q mid">média</span>' : '<span class="q bad">fraca</span>'
     }
-    li.innerHTML = `${avatar(name, colorOf(id))}<span class="name">${esc(name)}</span>${live ? '<span class="live-pill">AO VIVO</span>' : ''}${q}`
+    li.innerHTML = `${avatar(name, colorOf(id))}<span class="name">${esc(name)}</span>${talking ? `<span class="mic-pill" title="Com o microfone ligado">${icons.mic}</span>` : ''}${live ? '<span class="live-pill">AO VIVO</span>' : ''}${q}`
     people.appendChild(li)
   }
-  addPerson(S.net.selfId, `${myName()} (você)`, !!S.me, null)
-  for (const [id, p] of S.peers) addPerson(id, p.name, p.sharing, p.rtt)
+  addPerson(S.net.selfId, `${myName()} (você)`, !!S.me, null, !!S.voice || !!S.me?.mixer?.micOn)
+  for (const [id, p] of S.peers) addPerson(id, p.name, p.sharing, p.rtt, p.voice)
   const total = S.peers.size + 1
   $('#people-count').textContent = total
   $('#people-empty').hidden = S.peers.size > 0
@@ -367,6 +418,9 @@ function render() {
 
   // Meus controles
   $('#share-wrap').hidden = !!S.me
+  $('#btn-voice').hidden = !!S.me
+  $('#btn-voice').classList.toggle('on', !!S.voice)
+  setIcon($('#btn-voice [data-icon]'), S.voice ? 'mic' : 'micOff')
   $('#share-ctrls').hidden = !S.me
   $('#my-stats').hidden = !S.me
   if (S.me) {
@@ -497,7 +551,7 @@ async function startShare() {
   const opts = {
     res: Number($('#opt-res').value),
     pc: $('#opt-pc').checked,
-    mic: $('#opt-mic').checked,
+    mic: $('#opt-mic').checked || !!S?.voice,
     cam: $('#opt-cam').checked,
   }
   savePrefs(opts)
@@ -546,6 +600,7 @@ async function startShare() {
     video.contentHint = 'detail'
     video.addEventListener('ended', onScreenEnded)
     S.me = { out: new MediaStream([video, mixer.track]), video, cam: null, mixer, res: opts.res }
+    if (S.voice) await setVoice(false)
     $('#q-res').value = String(opts.res)
     $('#share-pop').hidden = true
 
@@ -567,7 +622,7 @@ function onScreenEnded() {
   stopShare()
 }
 
-async function stopShare() {
+async function stopShare(leaving = false) {
   if (!S?.me) return
   const me = S.me
   S.me = null
@@ -577,13 +632,15 @@ async function stopShare() {
     me.cam.getTracks().forEach((t) => t.stop())
   }
   me.video.removeEventListener('ended', onScreenEnded)
+  const wasTalking = me.mixer.micOn
   me.out.getTracks().forEach((t) => t.stop())
   await me.mixer.stop()
+  if (wasTalking && !leaving) await setVoice(true)
   if (S.focus === 'me') S.focus = null
   broadcastState()
   render()
 }
-$('#btn-stop').addEventListener('click', stopShare)
+$('#btn-stop').addEventListener('click', () => stopShare())
 
 async function setCamera(on) {
   if (!S?.me) return
@@ -622,6 +679,7 @@ $('#btn-mic').addEventListener('click', async () => {
   } catch {
     toast('Não consegui abrir o microfone.')
   }
+  broadcastState()
   render()
 })
 
@@ -905,7 +963,9 @@ $('#btn-copy').addEventListener('click', async () => {
 
 async function leaveRoom() {
   if (!S) return
-  await stopShare()
+  await stopShare(true)
+  if (S.voice) S.voice.getTracks().forEach((t) => t.stop())
+  for (const p of S.peers.values()) dropVoice(p)
   const s = S
   S = null
   s.timers.forEach(clearInterval)

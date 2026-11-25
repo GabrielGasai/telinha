@@ -7,10 +7,13 @@ export const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun.cloudflare.com:3478' },
-  // Se algum amigo não conseguir conectar (algumas redes 4G e operadoras bloqueiam
-  // conexão direta), dá para adicionar um servidor TURN aqui, por exemplo:
-  // { urls: 'turn:SEU-SERVIDOR:3478', username: 'usuario', credential: 'senha' },
 ]
+
+// Servidor de retransmissão (TURN), usado SÓ quando a conexão direta entre os PCs
+// é bloqueada (CGNAT de operadora, 4G, redes de empresa). Usa o Open Relay da
+// Metered. Cole aqui o link de credenciais do painel da Metered — ele termina
+// com "?apiKey=...". Vazio = sem retransmissão.
+export const TURN_CREDENTIALS_URL = ''
 
 // Bitrate de vídeo (kbps) por resolução, a 30 fps priorizando nitidez.
 // Texto e cores na tela precisam de bastante taxa para não borrar.

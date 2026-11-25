@@ -130,8 +130,10 @@ function enterRoom(code, openShare) {
   attachNet(net)
   S.timers.push(setInterval(stats, 2000))
 
-  // Se ninguém aparecer, entra de novo na sala a cada 15 s. Às vezes a primeira
+  // Se ninguém aparecer, entra de novo na sala a cada 8 s. Às vezes a primeira
   // tentativa de ligar os PCs falha, e uma nova tentativa conecta na hora.
+  // (Menos que isso atrapalha: a biblioteca anuncia a cada ~5,3 s, e os servidores
+  // de encontro bloqueiam quem manda mensagens demais.)
   S.aloneSince = Date.now()
   S.timers.push(setInterval(() => {
     if (!S) return
@@ -139,12 +141,12 @@ function enterRoom(code, openShare) {
       S.aloneSince = Date.now()
       return
     }
-    if (Date.now() - S.aloneSince < 15000) return
+    if (Date.now() - S.aloneSince < 8000) return
     try { S.net.room.leave() } catch {}
     S.net = openRoom(S.code)
     attachNet(S.net)
     S.aloneSince = Date.now()
-  }, 5000))
+  }, 2000))
 }
 
 // Liga os eventos da sala (gente entrando/saindo, telas, chat, imagens).

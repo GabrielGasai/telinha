@@ -89,7 +89,7 @@ $('#join-form').addEventListener('submit', (e) => {
   e.preventDefault()
   const code = normalizeCode($('#join-code').value)
   if (!code) {
-    showError($('#home-error'), 'Código inválido. Ele tem o formato LOBO-7342.')
+    showError($('#home-error'), 'O código da sala tem 4 números, por exemplo 7342.')
     return
   }
   showError($('#home-error'), '')

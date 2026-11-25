@@ -1,7 +1,7 @@
 // Salas P2P. O "aperto de mão" inicial entre os PCs usa relays públicos do Nostr
 // (via Trystero), então ninguém precisa hospedar servidor. Depois disso, vídeo e
 // áudio vão direto de um PC para o outro (WebRTC), criptografados.
-import { joinRoom, selfId } from 'trystero/nostr'
+import { joinRoom, selfId, getRelaySockets } from 'trystero/nostr'
 import { APP_ID, ICE_SERVERS } from './config.js'
 
 // Código da sala: 4 números (1000 a 9999). O 0000 fica reservado para testes.
@@ -46,4 +46,10 @@ export function openRoom(code) {
   // Imagens do chat (enviadas como bytes, direto entre os PCs).
   const [sendImg, onImg] = room.makeAction('img')
   return { room, selfId, sendState, onState, sendChat, onChat, sendImg, onImg }
+}
+
+// Quantos servidores de encontro estão conectados agora (para mostrar na tela).
+export function relayStatus() {
+  const socks = Object.values(getRelaySockets?.() || {})
+  return { open: socks.filter((w) => w.readyState === 1).length, total: RELAYS.length }
 }

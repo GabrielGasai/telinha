@@ -4,22 +4,15 @@
 import { joinRoom, selfId } from 'trystero/nostr'
 import { APP_ID, ICE_SERVERS } from './config.js'
 
-const WORDS = [
-  'LOBO', 'ONCA', 'TATU', 'SAPO', 'GATO', 'URSO', 'PATO', 'BODE', 'GALO', 'PUMA',
-  'FOCA', 'ORCA', 'LULA', 'MICO', 'BOTO', 'ZEBU', 'ARARA', 'COBRA', 'TUCANO', 'CORUJA',
-]
-
+// Código da sala: 4 números (1000 a 9999). O 0000 fica reservado para testes.
 export function createCode() {
-  const word = WORDS[Math.floor(Math.random() * WORDS.length)]
-  const num = String(Math.floor(1000 + Math.random() * 9000))
-  return `${word}-${num}`
+  return String(Math.floor(1000 + Math.random() * 9000))
 }
 
-// Aceita "lobo 7342", "LOBO-7342", "lobo7342"... e devolve "LOBO-7342".
+// Aceita "7342", " 73 42 ", "7342." etc. e devolve "7342".
 export function normalizeCode(raw) {
-  const clean = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
-  const m = clean.match(/^([A-Z]{3,8})(\d{4})$/)
-  return m ? `${m[1]}-${m[2]}` : null
+  const digits = String(raw || '').replace(/\D/g, '')
+  return /^\d{4}$/.test(digits) ? digits : null
 }
 
 // Relays públicos usados só para os PCs se acharem (testados e estáveis).

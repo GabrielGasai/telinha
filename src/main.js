@@ -671,6 +671,20 @@ function videoPlan(track, peerId) {
 }
 
 // ---------- estatísticas (a cada 2 s) ----------
+// Mostra para quem assiste se o som está chegando e com quanto atraso
+// (tempo de viagem + espera do áudio no buffer).
+function soundInfo(id, a, rtt) {
+  const p = S.peers.get(id)
+  if (!a || !p) return 'sem som'
+  const prev = p.audioBytes || 0
+  p.audioBytes = a.bytesReceived || 0
+  if (p.audioBytes <= prev) return 'sem som'
+  const buf = a.jitterBufferEmittedCount ? (a.jitterBufferDelay / a.jitterBufferEmittedCount) * 1000 : 0
+  const ms = Math.round(buf + ((rtt || 0) * 1000) / 2)
+  const quiet = (a.audioLevel ?? 1) < 0.001
+  return quiet ? `som ok (silêncio) · ${ms} ms` : `som ok · ${ms} ms`
+}
+
 async function stats() {
   if (!S) return
   try { S.relay = relayStatus() } catch {}
@@ -684,7 +698,9 @@ async function stats() {
       let bytes = 0
       let rtt = null
       let inbound = null
+      let audioIn = null
       report.forEach((r) => {
+        if (r.type === 'inbound-rtp' && r.kind === 'audio') audioIn = r
         if (r.type === 'outbound-rtp' && r.kind === 'video') bytes += r.bytesSent || 0
         if (r.type === 'inbound-rtp' && r.kind === 'video' && (!inbound || (r.frameHeight || 0) > (inbound.frameHeight || 0))) inbound = r
         if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded' && r.currentRoundTripTime != null) rtt = r.currentRoundTripTime
@@ -696,6 +712,7 @@ async function stats() {
       if (p && rtt != null) p.rtt = rtt
       if (id === S.focus && inbound?.frameHeight) {
         watchInfo = `${inbound.frameHeight}p · ${Math.round(inbound.framesPerSecond || 0)} fps`
+        watchInfo += ' · ' + soundInfo(id, audioIn, rtt)
       }
     } catch {}
   }

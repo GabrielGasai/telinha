@@ -47,7 +47,9 @@ export function openRoom(code) {
   const [sendChat, onChat] = room.makeAction('chat')
   // Imagens do chat (enviadas como bytes, direto entre os PCs).
   const [sendImg, onImg] = room.makeAction('img')
-  return { room, selfId, sendState, onState, sendChat, onChat, sendImg, onImg }
+  // Quem está falando agora (para o nome acender na lista).
+  const [sendTalk, onTalk] = room.makeAction('talk')
+  return { room, selfId, sendState, onState, sendChat, onChat, sendImg, onImg, sendTalk, onTalk }
 }
 
 // Quantos servidores de encontro estão conectados agora (para mostrar na tela).

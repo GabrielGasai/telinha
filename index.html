@@ -69,13 +69,22 @@
 <div class="controls">
                 <button id="btn-switch" class="ctrl labeled" title="Escolher outra tela ou janela para transmitir"><span data-icon="screen"></span><small>Trocar tela</small></button>
                 <button id="btn-pc" class="ctrl labeled" title="Liga ou desliga o som do seu PC na SUA transmissão (não muda o que você ouve)"><span data-icon="volume"></span><small>Som da sua live</small></button>
-                <button id="btn-mic" class="ctrl labeled" title="Liga ou desliga o seu microfone na SUA transmissão"><span data-icon="micOff"></span><small>Seu microfone</small></button>
+                <div class="mic-group pop-wrap"><button id="btn-mic" class="ctrl labeled" title="Liga ou desliga o seu microfone na SUA transmissão"><span data-icon="micOff"></span><small>Seu microfone</small></button><button class="mic-more" title="Sensibilidade do microfone" aria-label="Sensibilidade do microfone"><span data-icon="chevronUp"></span></button></div>
                 <button id="btn-cam" class="ctrl labeled" title="Liga ou desliga a sua câmera na SUA transmissão"><span data-icon="camOff"></span><small>Sua câmera</small></button>
                 <label for="q-res" class="sr-only">Resolução</label>
                 <select id="q-res" class="q-res" title="Resolução"><option value="1080">1080p</option><option value="720">720p</option></select>
                 <button id="btn-stop" class="btn danger ctrl-wide">Parar</button>
               </div>
             <span class="bar-side"></span>
+          </div>
+
+          <div id="sens-pop" class="popover sens-pop" hidden>
+            <strong>Sensibilidade do microfone</strong>
+            <label class="toggle"><span>Automática</span><input type="checkbox" id="sens-auto" checked /><i></i></label>
+            <div class="sens-meter" aria-hidden="true"><div class="sens-fill"></div><div class="sens-mark"></div></div>
+            <input id="sens-range" type="range" min="0" max="100" value="50" aria-label="Sensibilidade" />
+            <div class="sens-ends"><span>Mais sensível</span><span>Menos sensível</span></div>
+            <p class="sens-hint" id="sens-hint">A barra mostra o seu som agora. O microfone só abre quando o som passa da linha branca.</p>
           </div>
 
           <div class="bar">
@@ -88,7 +97,7 @@
             </div>
 
             <div class="controls">
-              <button id="btn-voice" class="ctrl labeled" title="Liga ou desliga o seu microfone para conversar com a sala"><span data-icon="micOff"></span><small>Falar</small></button>
+              <div class="mic-group pop-wrap" id="voice-wrap"><button id="btn-voice" class="ctrl labeled" title="Liga ou desliga o seu microfone para conversar com a sala"><span data-icon="micOff"></span><small>Falar</small></button><button class="mic-more" title="Sensibilidade do microfone" aria-label="Sensibilidade do microfone"><span data-icon="chevronUp"></span></button></div>
               <div class="pop-wrap" id="share-wrap">
                 <button id="btn-share" class="btn primary share-btn"><span data-icon="share"></span>Compartilhar tela</button>
                 <div id="share-pop" class="popover" hidden>

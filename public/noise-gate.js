@@ -14,6 +14,16 @@ class NoiseGate extends AudioWorkletProcessor {
     this.attack = 1 - Math.exp(-1 / (0.004 * sampleRate)) // abre em ~4 ms
     this.release = 1 - Math.exp(-1 / (0.09 * sampleRate)) // fecha em ~90 ms
     this.holdSamples = Math.round(0.3 * sampleRate) // segura aberto 300 ms após a fala
+    // Sensibilidade: automática (aprende o ruído) ou um limite escolhido pela pessoa.
+    this.auto = true
+    this.manual = 0.01
+    this.peak = 0
+    this.blocks = 0
+    this.port.onmessage = (e) => {
+      const d = e.data || {}
+      if (typeof d.auto === 'boolean') this.auto = d.auto
+      if (typeof d.threshold === 'number') this.manual = d.threshold
+    }
   }
 
   process(inputs, outputs) {
@@ -30,7 +40,7 @@ class NoiseGate extends AudioWorkletProcessor {
     else this.floor *= 1.0002
     this.floor = Math.min(0.05, Math.max(0.0004, this.floor))
 
-    const threshold = Math.max(this.floor * 3.5, 0.006)
+    const threshold = this.auto ? Math.max(this.floor * 3.5, 0.006) : this.manual
     if (rms > threshold) this.hold = this.holdSamples
     else this.hold -= x.length
     const want = this.hold > 0 ? 1 : 0
@@ -38,7 +48,14 @@ class NoiseGate extends AudioWorkletProcessor {
     const open = want === 1
     if (open !== this.open) {
       this.open = open
-      this.port.postMessage(open)
+      this.port.postMessage({ t: 'talk', v: open })
+    }
+    // Nível do som para a barrinha de sensibilidade (~20 vezes por segundo).
+    this.peak = Math.max(this.peak, rms)
+    if (++this.blocks >= 18) {
+      this.port.postMessage({ t: 'lvl', v: this.peak, thr: threshold })
+      this.peak = 0
+      this.blocks = 0
     }
 
     for (let i = 0; i < x.length; i++) {

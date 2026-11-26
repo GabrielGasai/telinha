@@ -2,7 +2,7 @@ import './styles.css'
 import { icons, renderIcons, setIcon } from './icons.js'
 import { createCode, normalizeCode, openRoom, relayStatus, RELAYS } from './room.js'
 import { startBridgeLink } from './bridge.js'
-import { openMic, getSensitivity, setSensitivity, onMicLevel, levelToValue, micIsOpen } from './mic.js'
+import { openMic, getSensitivity, setSensitivity, onMicLevel, levelToValue, micIsOpen, getMicId, setMicId } from './mic.js'
 import {
   isTauri, captureScreen, captureCamera, applyVideoQuality, preferH264, tuneSenders, videoKbps, Mixer, FPS,
   installBitrateBoost,
@@ -291,6 +291,7 @@ function playVoice(p, stream) {
   p.voiceEl = el
   p.voiceStream = stream
   applyPersonVolume(p)
+  applyOutput()
 }
 
 // ---------- volume de cada pessoa (botão direito no nome, igual no Discord) ----------
@@ -432,6 +433,7 @@ function showSens(btn) {
   pop.style.top = `${Math.max(8, r.top - pop.offsetHeight - 10)}px`
   btn.classList.add('open')
   syncSens()
+  fillDevices()
   stopLevel = onMicLevel((lvl, thr) => {
     const v = 100 - levelToValue(lvl)
     const fill = $('#sens-pop .sens-fill')
@@ -446,6 +448,82 @@ function closeSens() {
   stopLevel?.()
   stopLevel = null
 }
+// ---------- escolher microfone e saída do som ----------
+const OUT_KEY = 'telinha:outId'
+const getOutId = () => {
+  try { return localStorage.getItem(OUT_KEY) || '' } catch { return '' }
+}
+
+async function fillDevices() {
+  let list = []
+  try { list = await navigator.mediaDevices.enumerateDevices() } catch {}
+  const fill = (sel, kind, chosen) => {
+    const items = list.filter((d) => d.kind === kind && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
+    sel.innerHTML = ''
+    sel.append(new Option('Padrão do Windows', ''))
+    items.forEach((d, i) => sel.append(new Option(d.label || `${kind === 'audioinput' ? 'Microfone' : 'Saída'} ${i + 1}`, d.deviceId)))
+    // Aparelho escolhido que foi desconectado: mostra o padrão.
+    sel.value = items.some((d) => d.deviceId === chosen) ? chosen : ''
+  }
+  fill($('#dev-mic'), 'audioinput', getMicId())
+  fill($('#dev-out'), 'audiooutput', getOutId())
+}
+
+// Manda todo o som do Telinha para a saída escolhida (ou a padrão do Windows).
+async function applyOutput() {
+  let id = getOutId()
+  try {
+    const list = await navigator.mediaDevices.enumerateDevices()
+    if (id && !list.some((d) => d.kind === 'audiooutput' && d.deviceId === id)) id = ''
+  } catch {}
+  const els = [$('#stage-video'), ...document.querySelectorAll('body > audio')]
+  for (const el of els) if (el.setSinkId && el.sinkId !== id) el.setSinkId(id).catch(() => {})
+  if (boostCtx?.setSinkId) boostCtx.setSinkId(id).catch(() => {})
+}
+
+// Reabre os microfones ligados (para pegar o aparelho novo).
+async function reopenMics() {
+  if (!S) return
+  if (S.voice) {
+    await setVoice(false)
+    await setVoice(true)
+  }
+  const m = S?.me?.mixer
+  if (m?.micOn) {
+    await m.setMic(false)
+    await m.setMic(true).catch(() => toast('Não consegui abrir o microfone.'))
+    render()
+  }
+}
+
+$('#dev-mic').addEventListener('change', () => {
+  setMicId($('#dev-mic').value)
+  reopenMics()
+})
+$('#dev-out').addEventListener('change', () => {
+  try { localStorage.setItem(OUT_KEY, $('#dev-out').value) } catch {}
+  applyOutput()
+})
+
+// Plugou ou tirou um fone/microfone: atualiza a lista e troca sozinho.
+let devTimer = null
+navigator.mediaDevices?.addEventListener?.('devicechange', () => {
+  clearTimeout(devTimer)
+  devTimer = setTimeout(async () => {
+    fillDevices()
+    applyOutput()
+    // Usando o padrão (ou o escolhido sumiu): reabre para seguir o aparelho novo.
+    const list = await navigator.mediaDevices.enumerateDevices().catch(() => [])
+    const chosen = getMicId()
+    const micOpen = !!(S?.voice || S?.me?.mixer?.micOn)
+    if (micOpen && (!chosen || !list.some((d) => d.kind === 'audioinput' && d.deviceId === chosen))) {
+      await reopenMics()
+      toast('Aparelho de som trocado: o Telinha já mudou para ele.')
+    }
+  }, 800)
+})
+applyOutput()
+
 function syncSens() {
   const s = getSensitivity()
   $('#sens-auto').checked = s.auto

@@ -289,10 +289,102 @@ function playVoice(p, stream) {
   el.play().catch(() => {})
   document.body.appendChild(el)
   p.voiceEl = el
+  p.voiceStream = stream
+  applyPersonVolume(p)
 }
+
+// ---------- volume de cada pessoa (botão direito no nome, igual no Discord) ----------
+// Guardado pelo nome, então vale de novo na próxima vez que a pessoa entrar.
+const volKey = (name) => `telinha:vol:${String(name || '').trim().toLowerCase()}`
+function personVolume(p) {
+  const v = Number(localStorage.getItem(volKey(p?.name)))
+  return Number.isFinite(v) && localStorage.getItem(volKey(p?.name)) !== null ? v : 100
+}
+let boostCtx = null
+// Até 100%: volume normal do áudio. Acima de 100%: passa por um amplificador.
+function applyPersonVolume(p) {
+  if (!p?.voiceEl) return
+  const v = personVolume(p)
+  if (v > 100) {
+    try {
+      boostCtx ||= new AudioContext()
+      boostCtx.resume().catch(() => {})
+      if (!p.boost) {
+        const src = boostCtx.createMediaStreamSource(p.voiceStream)
+        const gain = boostCtx.createGain()
+        src.connect(gain).connect(boostCtx.destination)
+        p.boost = { src, gain }
+      }
+      p.boost.gain.gain.value = v / 100
+      p.voiceEl.muted = true // o som sai pelo amplificador
+      return
+    } catch {}
+  }
+  if (p.boost) {
+    p.boost.src.disconnect()
+    p.boost.gain.disconnect()
+    p.boost = null
+  }
+  p.voiceEl.muted = false
+  p.voiceEl.volume = Math.max(0, Math.min(1, v / 100))
+}
+
+function setPersonVolume(id, v) {
+  const p = S?.peers.get(id)
+  if (!p) return
+  try { localStorage.setItem(volKey(p.name), String(v)) } catch {}
+  applyPersonVolume(p)
+  applyVolume()
+}
+
+function closePersonMenu() {
+  $('#person-menu').hidden = true
+}
+function openPersonMenu(id, x, y) {
+  const p = S?.peers.get(id)
+  if (!p) return
+  const menu = $('#person-menu')
+  menu.dataset.id = id
+  $('#pm-name').textContent = p.name
+  const v = personVolume(p)
+  $('#pm-range').value = String(v)
+  $('#pm-value').textContent = `${v}%`
+  menu.hidden = false
+  const w = menu.offsetWidth
+  const h = menu.offsetHeight
+  menu.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, x))}px`
+  menu.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, y))}px`
+}
+$('#people').addEventListener('contextmenu', (e) => {
+  const li = e.target.closest('li[data-id]')
+  if (!li || li.dataset.id === S?.net.selfId) return
+  e.preventDefault()
+  e.stopPropagation()
+  openPersonMenu(li.dataset.id, e.clientX, e.clientY)
+})
+$('#pm-range').addEventListener('input', () => {
+  const v = Number($('#pm-range').value)
+  $('#pm-value').textContent = `${v}%`
+  setPersonVolume($('#person-menu').dataset.id, v)
+})
+$('#pm-reset').addEventListener('click', () => {
+  $('#pm-range').value = '100'
+  $('#pm-value').textContent = '100%'
+  setPersonVolume($('#person-menu').dataset.id, 100)
+})
+$('#person-menu').addEventListener('click', (e) => e.stopPropagation())
+$('#person-menu').addEventListener('contextmenu', (e) => e.preventDefault())
+document.addEventListener('click', closePersonMenu)
+document.addEventListener('keydown', (e) => e.key === 'Escape' && closePersonMenu())
 
 function dropVoice(p) {
   if (!p?.voiceEl) return
+  if (p.boost) {
+    p.boost.src.disconnect()
+    p.boost.gain.disconnect()
+    p.boost = null
+  }
+  p.voiceStream = null
   p.voiceEl.srcObject = null
   p.voiceEl.remove()
   p.voiceEl = null
@@ -510,6 +602,7 @@ function render() {
   const addPerson = (id, name, live, rtt, talking) => {
     const li = document.createElement('li')
     li.dataset.id = id
+    if (id !== S.net.selfId) li.title = 'Botão direito: mudar o volume dessa pessoa'
     if (isTalking(id)) li.classList.add('talking')
     let q = ''
     if (rtt != null) {
@@ -560,7 +653,7 @@ function render() {
     $('#btn-cam').classList.toggle('on', !!S.me.cam)
     setIcon($('#btn-cam [data-icon]'), S.me.cam ? 'cam' : 'camOff')
     const parts = []
-    if (m.pcOn) parts.push('PC')
+    if (m.pcOn) parts.push(m.pcClean ? 'PC (sem o Telinha)' : 'PC (todo o som, pode dar eco)')
     if (m.micOn) parts.push('microfone')
     $('#st-audio').textContent = parts.length ? parts.join(' + ') : 'desligado'
   }
@@ -569,7 +662,8 @@ function render() {
 // Só o som da tela que está no palco toca (e nunca o da sua própria tela).
 function applyVolume() {
   const v = $('#stage-video')
-  const vol = Number($('#vol').value) / 100
+  const p = S?.focus && S.focus !== 'me' ? S.peers.get(S.focus) : null
+  const vol = (Number($('#vol').value) / 100) * Math.min(1, (p ? personVolume(p) : 100) / 100)
   v.volume = vol
   v.muted = S?.focus === 'me' || vol === 0 || $('#btn-mute').dataset.muted === '1'
 }

@@ -656,6 +656,7 @@ function render() {
     if (m.pcOn) parts.push(m.pcClean ? 'PC (sem o Telinha)' : 'PC (todo o som, pode dar eco)')
     if (m.micOn) parts.push('microfone')
     $('#st-audio').textContent = parts.length ? parts.join(' + ') : 'desligado'
+    $('#st-audio').title = m.pcOn && !m.pcClean && m.pcWhy ? `Motivo: ${m.pcWhy}` : ''
   }
 }
 

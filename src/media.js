@@ -161,6 +161,7 @@ export class Mixer {
     this.node.port.postMessage({ inputRate: info.sampleRate })
     // "Som do PC (sem o Telinha)" = separa o som do próprio app (sem eco).
     this.pcClean = /sem o Telinha/.test(info.device || '')
+    this.pcWhy = String(info.device || '').split(' | ')[1] || ''
     this.pcOn = true
     return true
   }

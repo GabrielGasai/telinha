@@ -238,3 +238,9 @@ input[type='range'] { accent-color: var(--accent); width: 160px; }
 #sens-range:disabled { opacity: .45; }
 .sens-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); margin-top: -6px; }
 .sens-hint { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+/* Botão direito no nome: volume de cada pessoa */
+.person-menu { position: fixed; width: 230px; transform: none; bottom: auto; z-index: 30; }
+.person-menu .pm-row { display: flex; justify-content: space-between; font-size: 13px; }
+#pm-range { width: 100%; accent-color: var(--accent); }
+#people li[data-id] { cursor: context-menu; }

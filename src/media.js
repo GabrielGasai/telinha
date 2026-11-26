@@ -2,6 +2,7 @@
 import { invoke, Channel } from '@tauri-apps/api/core'
 import { VIDEO_KBPS, MAX_KBPS } from './config.js'
 import { fixRemoteSdp } from './bridge.js'
+import { openMic } from './mic.js'
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -164,18 +165,16 @@ export class Mixer {
 
   async setMic(on) {
     if (on) {
-      this.micStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: false,
-      })
-      this.micSrc = this.ctx.createMediaStreamSource(this.micStream)
+      if (this.mic) return true
+      this.mic = await openMic({ onSpeaking: (v) => this.onSpeaking?.(v) })
+      this.micSrc = this.ctx.createMediaStreamSource(this.mic.stream)
       this.micSrc.connect(this.micGain)
       this.micOn = true
     } else {
       this.micSrc?.disconnect()
-      this.micStream?.getTracks().forEach((t) => t.stop())
+      this.mic?.stop()
       this.micSrc = null
-      this.micStream = null
+      this.mic = null
       this.micOn = false
     }
     return this.micOn
@@ -183,7 +182,8 @@ export class Mixer {
 
   async stop() {
     if (isTauri) await invoke('stop_system_audio').catch(() => {})
-    this.micStream?.getTracks().forEach((t) => t.stop())
+    this.mic?.stop()
+    this.mic = null
     this.browserTrack?.stop()
     await this.ctx?.close().catch(() => {})
   }

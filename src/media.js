@@ -159,6 +159,8 @@ export class Mixer {
     }
     const info = await invoke('start_system_audio', { onChunk: ch })
     this.node.port.postMessage({ inputRate: info.sampleRate })
+    // "Som do PC (sem o Telinha)" = separa o som do próprio app (sem eco).
+    this.pcClean = /sem o Telinha/.test(info.device || '')
     this.pcOn = true
     return true
   }

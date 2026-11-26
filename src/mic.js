@@ -43,6 +43,15 @@ export function onMicLevel(fn) {
   return () => levelFns.delete(fn)
 }
 
+// Microfone escolhido ('' = o padrão do Windows).
+const MIC_KEY = 'telinha:micId'
+export function getMicId() {
+  try { return localStorage.getItem(MIC_KEY) || '' } catch { return '' }
+}
+export function setMicId(id) {
+  try { localStorage.setItem(MIC_KEY, id || '') } catch {}
+}
+
 export function micIsOpen() {
   return gates.size > 0
 }
@@ -52,7 +61,15 @@ export async function openMic({ onSpeaking } = {}) {
   // Alguns Windows/Chrome têm isolamento de voz melhor; usa se existir.
   const sup = navigator.mediaDevices.getSupportedConstraints?.() || {}
   if (sup.voiceIsolation) want.voiceIsolation = true
-  const raw = await navigator.mediaDevices.getUserMedia({ audio: want, video: false })
+  // Usa o microfone escolhido; se ele não estiver mais conectado, usa o padrão.
+  const chosen = getMicId()
+  let raw
+  try {
+    raw = await navigator.mediaDevices.getUserMedia({ audio: chosen ? { ...want, deviceId: { exact: chosen } } : want, video: false })
+  } catch (e) {
+    if (!chosen) throw e
+    raw = await navigator.mediaDevices.getUserMedia({ audio: want, video: false })
+  }
 
   const ctx = new AudioContext({ latencyHint: 'interactive' })
   await ctx.resume().catch(() => {})

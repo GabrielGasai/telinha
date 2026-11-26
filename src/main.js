@@ -2,7 +2,7 @@ import './styles.css'
 import { icons, renderIcons, setIcon } from './icons.js'
 import { createCode, normalizeCode, openRoom, relayStatus, RELAYS } from './room.js'
 import { startBridgeLink } from './bridge.js'
-import { openMic } from './mic.js'
+import { openMic, getSensitivity, setSensitivity, onMicLevel, levelToValue, micIsOpen } from './mic.js'
 import {
   isTauri, captureScreen, captureCamera, applyVideoQuality, preferH264, tuneSenders, videoKbps, Mixer, FPS,
   installBitrateBoost,
@@ -322,6 +322,65 @@ async function setVoice(on) {
   render()
 }
 $('#btn-voice').addEventListener('click', () => setVoice(!S?.voice))
+
+// ---------- sensibilidade do microfone (setinha ao lado do botão) ----------
+// Igual ao Discord: a barra mostra o som e a bolinha do controle é a linha de corte.
+// Mais à esquerda = mais sensível (abre com sons mais baixos).
+let stopLevel = null
+function showSens(btn) {
+  const pop = $('#sens-pop')
+  const open = pop.hidden || pop.dataset.for !== btn.previousElementSibling.id
+  closeSens()
+  if (!open) return
+  const r = btn.closest('.mic-group').getBoundingClientRect()
+  pop.hidden = false
+  pop.dataset.for = btn.previousElementSibling.id
+  const w = pop.offsetWidth
+  pop.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`
+  pop.style.top = `${Math.max(8, r.top - pop.offsetHeight - 10)}px`
+  btn.classList.add('open')
+  syncSens()
+  stopLevel = onMicLevel((lvl, thr) => {
+    const v = 100 - levelToValue(lvl)
+    const fill = $('#sens-pop .sens-fill')
+    fill.style.width = `${v}%`
+    fill.classList.toggle('over', lvl > thr)
+    if (getSensitivity().auto) $('#sens-pop .sens-mark').style.left = `${100 - levelToValue(thr)}%`
+  })
+}
+function closeSens() {
+  $('#sens-pop').hidden = true
+  document.querySelectorAll('.mic-more.open').forEach((b) => b.classList.remove('open'))
+  stopLevel?.()
+  stopLevel = null
+}
+function syncSens() {
+  const s = getSensitivity()
+  $('#sens-auto').checked = s.auto
+  $('#sens-range').disabled = s.auto
+  $('#sens-range').value = String(100 - s.value)
+  if (!s.auto) $('#sens-pop .sens-mark').style.left = `${100 - s.value}%`
+  if (!micIsOpen()) $('#sens-pop .sens-fill').style.width = '0%'
+  $('#sens-hint').textContent = micIsOpen()
+    ? 'A barra mostra o seu som agora. O microfone só abre quando o som passa da linha branca.'
+    : 'Ligue o microfone para ver a barra do seu som.'
+}
+document.querySelectorAll('.mic-more').forEach((b) =>
+  b.addEventListener('click', (e) => {
+    e.stopPropagation()
+    showSens(b)
+  }),
+)
+$('#sens-pop').addEventListener('click', (e) => e.stopPropagation())
+document.addEventListener('click', closeSens)
+$('#sens-auto').addEventListener('change', () => {
+  setSensitivity({ auto: $('#sens-auto').checked })
+  syncSens()
+})
+$('#sens-range').addEventListener('input', () => {
+  setSensitivity({ value: 100 - Number($('#sens-range').value) })
+  syncSens()
+})
 
 // ---------- quem está falando (o nome acende, igual no Discord) ----------
 function setTalking(on) {

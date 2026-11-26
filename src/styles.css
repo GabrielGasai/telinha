@@ -244,3 +244,7 @@ input[type='range'] { accent-color: var(--accent); width: 160px; }
 .person-menu .pm-row { display: flex; justify-content: space-between; font-size: 13px; }
 #pm-range { width: 100%; accent-color: var(--accent); }
 #people li[data-id] { cursor: context-menu; }
+
+/* Escolher microfone e saída do som */
+.dev-row { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.dev-row select { width: 100%; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font: inherit; font-size: 13px; }

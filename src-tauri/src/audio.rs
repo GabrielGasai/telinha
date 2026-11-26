@@ -39,16 +39,21 @@ pub fn start_system_audio(
     thread::spawn(move || {
         // Windows 10 (2004+) e 11: captura todo o som do PC MENOS o do próprio
         // Telinha (as lives que você assiste). Assim não tem eco entre os PCs.
+        #[allow(unused_mut, unused_assignments)]
+        let mut why = String::new();
         #[cfg(windows)]
         {
-            if let Ok((client, capture, event)) = sem_telinha::setup() {
-                let _ = info_tx.send(Ok(AudioInfo {
-                    sample_rate: sem_telinha::RATE,
-                    device: "Som do PC (sem o Telinha)".into(),
-                }));
-                sem_telinha::pump(&capture, &event, &on_chunk, &stop_rx);
-                let _ = client.stop_stream();
-                return;
+            match sem_telinha::setup() {
+                Ok((client, capture, event)) => {
+                    let _ = info_tx.send(Ok(AudioInfo {
+                        sample_rate: sem_telinha::RATE,
+                        device: "Som do PC (sem o Telinha)".into(),
+                    }));
+                    sem_telinha::pump(&capture, &event, &on_chunk, &stop_rx);
+                    let _ = client.stop_stream();
+                    return;
+                }
+                Err(e) => why = e,
             }
         }
         // Windows mais antigo: captura todo o som do PC (modo anterior).
@@ -57,6 +62,11 @@ pub fn start_system_audio(
                 if let Err(e) = stream.play() {
                     let _ = info_tx.send(Err(e.to_string()));
                     return;
+                }
+                // Conta por que não deu para separar o som do Telinha.
+                let mut info = info;
+                if !why.is_empty() {
+                    info.device = format!("{} | {}", info.device, why);
                 }
                 let _ = info_tx.send(Ok(info));
                 let _ = stop_rx.recv();
@@ -182,9 +192,23 @@ mod sem_telinha {
 
     pub fn setup() -> Result<(AudioClient, AudioCaptureClient, Handle), String> {
         let _ = wasapi::initialize_mta();
+        // Esse modo do Windows não informa o "período" do dispositivo, então o
+        // tamanho do buffer precisa ser dito explicitamente (20 ms, como no
+        // exemplo da Microsoft). Tenta alguns tamanhos antes de desistir.
+        let mut last = String::new();
+        for hns in [200_000i64, 100_000, 0] {
+            match try_setup(hns) {
+                Ok(v) => return Ok(v),
+                Err(e) => last = e,
+            }
+        }
+        Err(last)
+    }
+
+    fn try_setup(hns: i64) -> Result<(AudioClient, AudioCaptureClient, Handle), String> {
         // false = EXCLUIR este processo e todos os filhos dele.
         let mut client = AudioClient::new_application_loopback_client(std::process::id(), false)
-            .map_err(|e| format!("{e:?}"))?;
+            .map_err(|e| format!("ativar: {e:?}"))?;
         let format = WaveFormat::new(16, 16, SampleType::Int, RATE as usize, 2, None);
         client
             .initialize_client(
@@ -192,11 +216,11 @@ mod sem_telinha {
                 Direction::Capture,
                 StreamMode::EventsShared {
                     autoconvert: true,
-                    buffer_duration_hns: 0,
+                    buffer_duration_hns: hns,
                 },
                 None,
             )
-            .map_err(|e| format!("{e:?}"))?;
+            .map_err(|e| format!("iniciar({hns}): {e:?}"))?;
         let event = client.set_get_eventhandle().map_err(|e| format!("{e:?}"))?;
         let capture = client
             .get_audiocaptureclient()

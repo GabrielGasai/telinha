@@ -35,6 +35,28 @@ export function fixRemoteSdp(sdp) {
   return sdp.replace(new RegExp(` ${ip} (\\d+) typ relay`, 'g'), ` ${mine.lanIp} $1 typ relay`)
 }
 
+// Testa se uma ponte responde de verdade (pede um endereço a ela) antes de usar.
+// Uma ponte que não responde faria a ligação esperar até o navegador desistir dela.
+async function bridgeWorks(entry, ms = 3000) {
+  let pc
+  try {
+    pc = new RTCPeerConnection({ iceServers: [entry], iceTransportPolicy: 'relay' })
+    pc.createDataChannel('teste')
+    const ok = new Promise((resolve) => {
+      pc.onicecandidate = (e) => {
+        if (e.candidate && / typ relay/.test(e.candidate.candidate)) resolve(true)
+      }
+      setTimeout(() => resolve(false), ms)
+    })
+    await pc.setLocalDescription(await pc.createOffer())
+    return await ok
+  } catch {
+    return false
+  } finally {
+    try { pc?.close() } catch {}
+  }
+}
+
 // Uma sessão por sala.
 export function startBridgeLink({ code, selfId, relays, onChange }) {
   const state = { closed: false, socks: [], timer: null, info: null, bridges: new Map(), topic: null, key: null, priv: null, pub: null }
@@ -79,14 +101,20 @@ export function startBridgeLink({ code, selfId, relays, onChange }) {
     if (!msg || msg.id === selfId || !msg.ip || !msg.port) return
     if (Date.now() - (msg.t || 0) > 60_000) return
     const key = `${msg.ip}:${msg.port}`
-    const isNew = !state.bridges.has(key)
-    state.bridges.set(key, { ...msg, seen: Date.now() })
-    if (isNew && added.length < MAX_BRIDGES) {
-      const entry = { urls: `turn:${msg.ip}:${msg.port}?transport=udp`, username: msg.user, credential: msg.pass }
+    if (state.bridges.has(key)) return
+    // Marca como "testando" para não testar a mesma ponte várias vezes.
+    state.bridges.set(key, { ...msg, ok: null })
+    const entry = { urls: `turn:${msg.ip}:${msg.port}?transport=udp`, username: msg.user, credential: msg.pass }
+    const ok = await bridgeWorks(entry)
+    if (state.closed) return
+    state.bridges.set(key, { ...msg, ok })
+    if (ok && added.length < MAX_BRIDGES) {
       ICE_SERVERS.push(entry) // a lista é usada a cada nova tentativa de ligação
       added.push(entry)
     }
-    if (isNew) onChange?.()
+    // Ponte que não respondeu: tenta de novo daqui a 1 minuto (pode ter sido liberada).
+    if (!ok) setTimeout(() => state.bridges.get(key)?.ok === false && state.bridges.delete(key), 60_000)
+    onChange?.()
   }
 
   function connect(url) {
@@ -139,9 +167,9 @@ export function startBridgeLink({ code, selfId, relays, onChange }) {
       }
       onChange?.()
     },
-    // Quantas pontes de outras pessoas eu conheço.
+    // Quantas pontes de outras pessoas estão funcionando.
     others() {
-      return state.bridges.size
+      return [...state.bridges.values()].filter((b) => b.ok).length
     },
     close() {
       state.closed = true

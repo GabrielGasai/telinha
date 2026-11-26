@@ -2,6 +2,7 @@ import './styles.css'
 import { icons, renderIcons, setIcon } from './icons.js'
 import { createCode, normalizeCode, openRoom, relayStatus, RELAYS } from './room.js'
 import { startBridgeLink } from './bridge.js'
+import { openMic } from './mic.js'
 import {
   isTauri, captureScreen, captureCamera, applyVideoQuality, preferH264, tuneSenders, videoKbps, Mixer, FPS,
   installBitrateBoost,
@@ -251,6 +252,14 @@ function attachNet(net) {
     addChat(S.peers.get(id)?.name || 'Alguém', '', false, new Blob([bytes], { type }), colorOf(id))
   })
 
+  net.onTalk((on, id) => {
+    const p = S.peers.get(id)
+    if (!p) return
+    p.talking = !!on
+    p.talkAt = Date.now()
+    markTalk(id, p.talking)
+  })
+
   net.onChat((data, id) => {
     const text = String(data?.text || '').slice(0, 500).trim()
     if (text) addChat(S.peers.get(id)?.name || 'Alguém', text, false, null, colorOf(id))
@@ -294,26 +303,47 @@ async function setVoice(on) {
   if (on && !S.voice) {
     let mic
     try {
-      mic = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: false,
-      })
+      mic = await openMic({ onSpeaking: setTalking })
     } catch {
       toast('Não consegui abrir o microfone.')
       return
     }
-    if (!S) return mic.getTracks().forEach((t) => t.stop())
-    S.voice = mic
-    for (const id of Object.keys(S.net.room.getPeers())) S.net.room.addStream(mic, id, { kind: 'voice' })
+    if (!S) return mic.stop()
+    S.voiceMic = mic
+    S.voice = mic.stream
+    for (const id of Object.keys(S.net.room.getPeers())) S.net.room.addStream(S.voice, id, { kind: 'voice' })
   } else if (!on && S.voice) {
     try { S.net.room.removeStream(S.voice) } catch {}
-    S.voice.getTracks().forEach((t) => t.stop())
+    S.voiceMic?.stop()
+    S.voiceMic = null
     S.voice = null
   }
   broadcastState()
   render()
 }
 $('#btn-voice').addEventListener('click', () => setVoice(!S?.voice))
+
+// ---------- quem está falando (o nome acende, igual no Discord) ----------
+function setTalking(on) {
+  if (!S || S.talking === on) return
+  S.talking = on
+  clearInterval(S.talkTimer)
+  try { S.net.sendTalk(on) } catch {}
+  // Enquanto fala, repete o aviso (se um se perder, o nome não fica aceso para sempre).
+  if (on) S.talkTimer = setInterval(() => { try { S?.net.sendTalk(true) } catch {} }, 2000)
+  markTalk(S.net.selfId, on)
+}
+
+function markTalk(id, on) {
+  const li = document.querySelector(`#people li[data-id="${CSS.escape(id)}"]`)
+  li?.classList.toggle('talking', !!on)
+}
+
+function isTalking(id) {
+  if (id === S.net.selfId) return !!S.talking
+  const p = S.peers.get(id)
+  return !!p?.talking && Date.now() - (p.talkAt || 0) < 3500
+}
 
 // A câmera só aparece se ainda estiver chegando imagem dela.
 function camLive(stream) {
@@ -420,6 +450,8 @@ function render() {
   people.innerHTML = ''
   const addPerson = (id, name, live, rtt, talking) => {
     const li = document.createElement('li')
+    li.dataset.id = id
+    if (isTalking(id)) li.classList.add('talking')
     let q = ''
     if (rtt != null) {
       const ms = rtt * 1000
@@ -637,6 +669,7 @@ async function startShare() {
     video.contentHint = 'detail'
     video.addEventListener('ended', onScreenEnded)
     S.me = { out: new MediaStream([video, mixer.track]), video, cam: null, mixer, res: opts.res }
+    mixer.onSpeaking = setTalking
     if (S.voice) await setVoice(false)
     $('#q-res').value = String(opts.res)
     $('#share-pop').hidden = true
@@ -782,6 +815,7 @@ function soundInfo(id, a, rtt) {
 
 async function stats() {
   if (!S) return
+  for (const [id, p] of S.peers) if (p.talking && !isTalking(id)) { p.talking = false; markTalk(id, false) }
   try { S.relay = relayStatus() } catch {}
   const peers = S.net.room.getPeers()
   let upBits = 0
@@ -1001,7 +1035,9 @@ $('#btn-copy').addEventListener('click', async () => {
 async function leaveRoom() {
   if (!S) return
   await stopShare(true)
+  S.voiceMic?.stop()
   if (S.voice) S.voice.getTracks().forEach((t) => t.stop())
+  clearInterval(S.talkTimer)
   for (const p of S.peers.values()) dropVoice(p)
   S.bridge?.close()
   if (isTauri) invoke('stop_bridge').catch(() => {})

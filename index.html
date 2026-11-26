@@ -78,6 +78,13 @@
             <span class="bar-side"></span>
           </div>
 
+          <div id="person-menu" class="popover person-menu" hidden>
+            <strong id="pm-name">Pessoa</strong>
+            <div class="pm-row"><span class="muted">Volume dessa pessoa</span><span id="pm-value">100%</span></div>
+            <input id="pm-range" type="range" min="0" max="200" step="5" value="100" aria-label="Volume dessa pessoa" />
+            <button id="pm-reset" class="btn">Voltar ao normal</button>
+          </div>
+
           <div id="sens-pop" class="popover sens-pop" hidden>
             <strong>Sensibilidade do microfone</strong>
             <label class="toggle"><span>Automática</span><input type="checkbox" id="sens-auto" checked /><i></i></label>
